@@ -1,1 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Web VLC Player</title>
 
+  <!-- Video.js Theme & Styles -->
+  <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
+  <link href="https://unpkg.com/@videojs/themes@1.0.1/dist/city/index.css" rel="stylesheet" />
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #fff; }
+    
+    header { padding: 20px; font-size: 24px; font-weight: bold; color: #ff8800; display: flex; align-items: center; gap: 10px; }
+
+    .container { padding: 20px; }
+    .section-title { font-size: 18px; margin-bottom: 15px; color: #ff8800; }
+
+    .stream-card {
+      width: 140px; height: 120px; border: 2px dashed #ff8800; border-radius: 12px;
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      cursor: pointer; transition: 0.2s; background: rgba(255, 136, 0, 0.05);
+    }
+    .stream-card:hover { background: rgba(255, 136, 0, 0.15); }
+    .stream-card .icon { font-size: 32px; color: #ff8800; margin-bottom: 5px; }
+
+    /* Modal Styling */
+    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); justify-content: center; align-items: center; z-index: 10; }
+    .modal-content { background: #222; padding: 25px; border-radius: 12px; width: 90%; max-width: 450px; }
+    .modal-content h3 { margin-bottom: 15px; }
+    .modal-content input { width: 100%; padding: 12px; border-radius: 6px; border: 1px solid #444; background: #111; color: #fff; margin-bottom: 15px; }
+    .modal-buttons { display: flex; justify-content: flex-end; gap: 10px; }
+    .btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+    .btn-orange { background: #ff8800; color: white; }
+    .btn-cancel { background: #444; color: white; }
+
+    /* Player Container */
+    #player-wrapper { display: none; width: 100vw; height: 100vh; position: fixed; inset: 0; background: black; z-index: 20; }
+    .close-player { position: absolute; top: 15px; right: 15px; z-index: 25; background: rgba(0,0,0,0.6); color: white; border: none; padding: 10px 15px; border-radius: 50%; cursor: pointer; font-size: 18px; }
+    
+    .video-js { width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <span style="font-size:30px; color:#ff8800;">🍊</span> Web VLC
+  </header>
+
+  <div class="container">
+    <div class="section-title">Streams</div>
+    <div class="stream-card" onclick="toggleModal(true)">
+      <div class="icon">+</div>
+      <div>New stream</div>
+    </div>
+  </div>
+
+  <!-- Modal for Stream URL -->
+  <div class="modal" id="streamModal">
+    <div class="modal-content">
+      <h3>Enter Stream URL</h3>
+      <input type="text" id="streamUrlInput" placeholder="https://example.com/stream.m3u8 or .mp4">
+      <div class="modal-buttons">
+        <button class="btn btn-cancel" onclick="toggleModal(false)">Cancel</button>
+        <button class="btn btn-orange" onclick="startPlayback()">Play</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fullscreen Player Wrapper -->
+  <div id="player-wrapper">
+    <button class="close-player" onclick="stopPlayback()">✕</button>
+    <video id="vlc-player" class="video-js vjs-theme-city" controls preload="auto"></video>
+  </div>
+
+  <script src="https://vjs.zencdn.net/8.3.0/video.min.js"></script>
+  <script>
+    let player;
+
+    function toggleModal(show) {
+      document.getElementById('streamModal').style.display = show ? 'flex' : 'none';
+    }
+
+    function startPlayback() {
+      const inputUrl = document.getElementById('streamUrlInput').value.trim();
+      if (!inputUrl) return;
+
+      toggleModal(false);
+      document.getElementById('player-wrapper').style.display = 'block';
+
+      const proxyUrl = `/proxy?url=${encodeURIComponent(inputUrl)}`;
+
+      if (!player) {
+        player = videojs('vlc-player', {
+          html5: {
+            vhs: { overrideNative: true }
+          }
+        });
+      }
+
+      let type = 'video/mp4';
+      if (inputUrl.includes('.m3u8')) {
+        type = 'application/x-mpegURL';
+      }
+
+      player.src({ src: proxyUrl, type: type });
+      player.play();
+    }
+
+    function stopPlayback() {
+      if (player) {
+        player.pause();
+      }
+      document.getElementById('player-wrapper').style.display = 'none';
+    }
+  </script>
+</body>
+</html>
