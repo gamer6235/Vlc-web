@@ -5,10 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Web VLC Player</title>
 
-  <!-- Video.js Theme & Styles -->
-  <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
-  <link href="https://unpkg.com/@videojs/themes@1.0.1/dist/city/index.css" rel="stylesheet" />
-
+  <!-- ArtPlayer UI CSS -->
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #fff; }
@@ -36,12 +33,16 @@
     .btn-orange { background: #ff8800; color: white; }
     .btn-cancel { background: #444; color: white; }
 
-    /* Player Container */
+    /* Fullscreen Player Container */
     #player-wrapper { display: none; width: 100vw; height: 100vh; position: fixed; inset: 0; background: black; z-index: 20; }
     .close-player { position: absolute; top: 15px; right: 15px; z-index: 25; background: rgba(0,0,0,0.6); color: white; border: none; padding: 10px 15px; border-radius: 50%; cursor: pointer; font-size: 18px; }
     
-    .video-js { width: 100%; height: 100%; }
+    #artplayer { width: 100%; height: 100%; }
   </style>
+
+  <!-- ArtPlayer Library & HLS Plugin -->
+  <script src="https://cdn.jsdelivr.net/npm/artplayer/dist/artplayer.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 </head>
 <body>
 
@@ -57,11 +58,12 @@
     </div>
   </div>
 
-  <!-- Modal for Stream URL -->
+  <!-- Modal for Stream URL & External Subtitle -->
   <div class="modal" id="streamModal">
     <div class="modal-content">
-      <h3>Enter Stream URL</h3>
-      <input type="text" id="streamUrlInput" placeholder="https://example.com/stream.m3u8 or .mp4">
+      <h3>Enter Stream Details</h3>
+      <input type="text" id="streamUrlInput" placeholder="Stream URL (.m3u8, .mp4, .mkv)">
+      <input type="text" id="subtitleUrlInput" placeholder="Subtitle URL (.vtt or .srt) [Optional]">
       <div class="modal-buttons">
         <button class="btn btn-cancel" onclick="toggleModal(false)">Cancel</button>
         <button class="btn btn-orange" onclick="startPlayback()">Play</button>
@@ -69,15 +71,14 @@
     </div>
   </div>
 
-  <!-- Fullscreen Player Wrapper -->
+  <!-- Player Wrapper -->
   <div id="player-wrapper">
     <button class="close-player" onclick="stopPlayback()">✕</button>
-    <video id="vlc-player" class="video-js vjs-theme-city" controls preload="auto"></video>
+    <div id="artplayer"></div>
   </div>
 
-  <script src="https://vjs.zencdn.net/8.3.0/video.min.js"></script>
   <script>
-    let player;
+    let art;
 
     function toggleModal(show) {
       document.getElementById('streamModal').style.display = show ? 'flex' : 'none';
@@ -85,36 +86,91 @@
 
     function startPlayback() {
       const inputUrl = document.getElementById('streamUrlInput').value.trim();
+      const subtitleUrl = document.getElementById('subtitleUrlInput').value.trim();
+      
       if (!inputUrl) return;
 
       toggleModal(false);
       document.getElementById('player-wrapper').style.display = 'block';
 
+      // Go Backend Proxy URL
       const proxyUrl = `/proxy?url=${encodeURIComponent(inputUrl)}`;
 
-      if (!player) {
-        player = videojs('vlc-player', {
-          html5: {
-            vhs: { overrideNative: true }
-          }
-        });
+      if (art) {
+        art.destroy();
       }
 
-      let type = 'video/mp4';
-      if (inputUrl.includes('.m3u8')) {
-        type = 'application/x-mpegURL';
-      }
+      art = new Artplayer({
+        container: '#artplayer',
+        url: proxyUrl,
+        type: inputUrl.includes('.m3u8') ? 'm3u8' : 'auto',
+        customType: {
+          m3u8: function (video, url) {
+            if (Hls.isSupported()) {
+              const hls = new Hls();
+              hls.loadSource(url);
+              hls.attachMedia(video);
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+              video.src = url;
+            }
+          },
+        },
+        // Features & Options
+        setting: true,
+        flip: true,
+        playbackRate: true,
+        aspectRatio: true,
+        fullscreen: true,
+        fullscreenWeb: true,
+        subtitleOffset: true,
+        miniProgressBar: true,
+        mutex: true,
+        backdrop: true,
+        playsInline: true,
+        autoPlayback: true,
+        
+        // Subtitle Configuration
+        subtitle: subtitleUrl ? {
+          url: `/proxy?url=${encodeURIComponent(subtitleUrl)}`,
+          type: subtitleUrl.endsWith('.srt') ? 'srt' : 'vtt',
+          style: {
+            color: '#fff',
+            fontSize: '24px',
+          },
+        } : {},
 
-      player.src({ src: proxyUrl, type: type });
-      player.play();
+        // Custom Control Buttons (Time Skip -10s / +10s)
+        controls: [
+          {
+            name: 'rewind',
+            position: 'left',
+            index: 10,
+            html: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/></svg>',
+            tooltip: 'Backward 10s',
+            click: function () {
+              art.seek = Math.max(0, art.currentTime - 10);
+            },
+          },
+          {
+            name: 'forward',
+            position: 'left',
+            index: 11,
+            html: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg>',
+            tooltip: 'Forward 10s',
+            click: function () {
+              art.seek = Math.min(art.duration, art.currentTime + 10);
+            },
+          },
+        ],
+      });
     }
 
     function stopPlayback() {
-      if (player) {
-        player.pause();
+      if (art) {
+        art.destroy();
       }
       document.getElementById('player-wrapper').style.display = 'none';
     }
   </script>
 </body>
-</html>
+  </html>
